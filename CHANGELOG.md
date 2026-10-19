@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.6.0
+
+- Preserve completed web-search markers as assistant context when replaying
+  Codex history, avoiding orphan function calls and upstream Responses API
+  validation failures. Preserve complete upstream HTTP error details.
+- Honor the model selected in the Codex model picker.
+- Added local realtime voice routing with Whisper transcription and Kokoro
+  speech, streamed transcript updates, and cancellation support.
+- Fixed Linux RTP encoder drain handling and hardened command execution.
+
 - Added configurable `vad` and `manual` voice interruption modes. On macOS,
   manual mode uses Right Command as push-to-talk: key-down interrupts playback
   and starts recording, key-up ends and commits the recording, and microphone
