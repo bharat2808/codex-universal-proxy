@@ -535,6 +535,22 @@ function translateInputItem(item) {
     }
     case 'web_search_call': {
       verboseToolLog('request input web_search_call', item);
+      // Completed proxy searches are saved by Codex as UI markers carrying
+      // only an action. They have no call_id or replayable tool result, so
+      // turning them into function_call items creates invalid/orphan calls.
+      if (!item.call_id) {
+        return {
+          type: 'message',
+          role: 'assistant',
+          content: [{
+            type: 'output_text',
+            text: '[web_search_call] ' + JSON.stringify({
+              status: item.status || 'completed',
+              action: item.action || {},
+            }),
+          }],
+        };
+      }
       return {
         type: 'function_call',
         call_id: item.call_id,
@@ -1373,7 +1389,7 @@ function postUpstreamStream(upstream, body, signal) {
       if (res.statusCode && res.statusCode >= 400) {
         let buf = '';
         res.on('data', (c) => { buf += c.toString('utf8'); });
-        res.on('end', () => reject(new Error('upstream ' + res.statusCode + ': ' + buf.slice(0, 500))));
+        res.on('end', () => reject(new Error('upstream ' + res.statusCode + ': ' + buf)));
         return;
       }
       resolve(res);

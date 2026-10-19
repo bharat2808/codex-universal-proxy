@@ -1329,6 +1329,34 @@ test('request translation exposes deferred tool_search namespace tools as callab
   assert.match(body.input[0].output, /mcp__storefront_builder__list_storefront_build_sessions/);
 });
 
+test('replayed completed web search markers do not become orphan function calls', () => {
+  const { translateInputItem } = require('../src/proxy');
+  for (const action of [
+    { type: 'search', query: 'ecommerce examples' },
+    { type: 'open_page', url: 'https://example.com' },
+    { type: 'find_in_page', url: 'https://example.com', pattern: 'store' },
+  ]) {
+    // This is the UI-only shape saved by Codex after a proxy-owned search.
+    const item = translateInputItem({
+      type: 'web_search_call', id: 'fc_search', status: 'completed', action,
+    });
+    assert.equal(item.type, 'message');
+    assert.equal(item.role, 'assistant');
+    assert.match(item.content[0].text, /web_search_call/);
+    assert.ok(item.content[0].text.includes(JSON.stringify(action)));
+  }
+});
+
+test('web search calls with a call_id retain their paired function-call translation', () => {
+  const { translateInputItem } = require('../src/proxy');
+  const item = translateInputItem({
+    type: 'web_search_call', call_id: 'call_search', arguments: '{"query":"store"}',
+  });
+  assert.equal(item.type, 'function_call');
+  assert.equal(item.call_id, 'call_search');
+  assert.equal(item.arguments, '{"query":"store"}');
+});
+
 test('request translation converts native tool_search to callable function tool', () => {
   const { translateRequestBody } = require('../src/proxy');
   const body = {
@@ -2646,6 +2674,25 @@ test('upstream HTTP errors emit a complete failed lifecycle', async () => {
     ]);
     assert.equal(events.at(-1).data.response.status, 'failed');
     assert.match(events.at(-1).data.response.error.message, /upstream 503/);
+  });
+});
+
+test('upstream validation errors retain the field path beyond the first 500 characters', async () => {
+  const detail = JSON.stringify({
+    error: { code: 'invalid_prompt', message: 'Invalid Responses API request' },
+    metadata: { raw: 'x'.repeat(600) + ' input[3].call_id: expected string, received undefined' },
+  });
+  await withProxy((req, res) => {
+    req.resume();
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(detail);
+  }, async (proxyPort) => {
+    const response = await postStream(proxyPort, {
+      model: 'test-model', input: 'continue after a tool', tools: [], stream: true,
+    });
+    const events = parseSse(response.body);
+    assert.equal(events.at(-1).event, 'response.failed');
+    assert.ok(events.at(-1).data.response.error.message.includes(detail));
   });
 });
 
